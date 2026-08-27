@@ -1,0 +1,50 @@
+name: Publish FlowERYN Haven v1.0.3 Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-v1.0.3-release.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified v1.0.3 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p release_files
+          gh run download 33081233342 \
+            --repo jhayeroe/FlowERYN-Haven \
+            --name FlowERYN-Haven-v1.0.3 \
+            --dir release_files
+          test -s release_files/FlowERYN-Haven-v1.0.3.apk
+          sha256sum release_files/FlowERYN-Haven-v1.0.3.apk
+
+      - name: Publish public GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          APK='release_files/FlowERYN-Haven-v1.0.3.apk'
+          if gh release view v1.0.3 --repo jhayeroe/FlowERYN-Haven >/dev/null 2>&1; then
+            gh release upload v1.0.3 "$APK" --repo jhayeroe/FlowERYN-Haven --clobber
+          else
+            gh release create v1.0.3 "$APK" \
+              --repo jhayeroe/FlowERYN-Haven \
+              --title 'FlowERYN Haven v1.0.3' \
+              --notes 'Startup crash fix. Product names may be duplicated where legitimate; database schema upgraded to v2.'
+          fi
+
+      - name: Print public download URL
+        shell: bash
+        run: |
+          echo 'https://github.com/jhayeroe/FlowERYN-Haven/releases/download/v1.0.3/FlowERYN-Haven-v1.0.3.apk'
