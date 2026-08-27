@@ -24,6 +24,7 @@ jobs:
           echo "64ca4b623126ddebdce1d9e0d8831f7a2f47e7ab2ee26bb0dbe9b86022f6eba3  source.tar.gz" | sha256sum -c -
           tar -xzf source.tar.gz
           rm -f source.b64 source.tar.gz
+          printf 'android.useAndroidX=true\nandroid.enableJetifier=true\n' > gradle.properties
 
       - name: Setup JDK 17
         uses: actions/setup-java@v4
