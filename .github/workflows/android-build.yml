@@ -28,11 +28,12 @@ jobs:
           sed -i '/<item name="colorBackground">/d' app/src/main/res/values/themes.xml
           sed -i 's/app:textColor=/android:textColor=/g' app/src/main/res/layout/activity_main.xml app/src/main/res/layout/activity_materials.xml
           sed -i '/scrollingView.setClipToPadding(false);/d' app/src/main/java/com/floweryn/costing/UiHelper.java
+          python3 scripts/apply_runtime_hotfix.py
 
       - name: Upload restored source
         uses: actions/upload-artifact@v4
         with:
-          name: FlowERYN-Haven-restored-source
+          name: FlowERYN-Haven-restored-source-v1.0.3
           path: |
             app/src
             app/build.gradle
@@ -74,7 +75,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: FlowERYN-Haven-build-log
+          name: FlowERYN-Haven-build-log-v1.0.3
           path: build.log
           if-no-files-found: warn
           retention-days: 7
@@ -84,19 +85,63 @@ jobs:
         shell: bash
         run: exit 1
 
-      - name: Prepare APK artifact
+      - name: Verify clean first launch on Android 35
+        id: smoke_test
         if: steps.gradle_build.outcome == 'success'
-        shell: bash
-        run: |
-          cp app/build/outputs/apk/debug/app-debug.apk FlowERYN-Haven-v1.0.2.apk
-          test -s FlowERYN-Haven-v1.0.2.apk
-          sha256sum FlowERYN-Haven-v1.0.2.apk
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          disable-animations: true
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm clear com.floweryn.costing
+            adb logcat -c
+            adb shell am start -W -n com.floweryn.costing/.MainActivity
+            sleep 5
+            adb logcat -d > runtime.log
+            pid=$(adb shell pidof com.floweryn.costing | tr -d '\r')
+            echo "FlowERYN PID: $pid"
+            if [ -z "$pid" ]; then
+              echo "FlowERYN process is not alive after launch"
+              grep -A 80 -B 20 -E "FATAL EXCEPTION|AndroidRuntime|floweryn" runtime.log || true
+              exit 1
+            fi
+            if grep -q "FATAL EXCEPTION" runtime.log; then
+              echo "Fatal exception detected during first launch"
+              grep -A 80 -B 20 -E "FATAL EXCEPTION|AndroidRuntime|floweryn" runtime.log || true
+              exit 1
+            fi
+            echo "FlowERYN clean-launch smoke test passed"
 
-      - name: Upload APK
-        if: steps.gradle_build.outcome == 'success'
+      - name: Upload runtime smoke log
+        if: always() && steps.gradle_build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: FlowERYN-Haven-v1.0.2
-          path: FlowERYN-Haven-v1.0.2.apk
+          name: FlowERYN-Haven-runtime-log-v1.0.3
+          path: runtime.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Fail if launch smoke test failed
+        if: steps.gradle_build.outcome == 'success' && steps.smoke_test.outcome == 'failure'
+        shell: bash
+        run: exit 1
+
+      - name: Prepare APK artifact
+        if: steps.gradle_build.outcome == 'success' && steps.smoke_test.outcome == 'success'
+        shell: bash
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk FlowERYN-Haven-v1.0.3.apk
+          test -s FlowERYN-Haven-v1.0.3.apk
+          sha256sum FlowERYN-Haven-v1.0.3.apk
+
+      - name: Upload APK
+        if: steps.gradle_build.outcome == 'success' && steps.smoke_test.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowERYN-Haven-v1.0.3
+          path: FlowERYN-Haven-v1.0.3.apk
           if-no-files-found: error
           retention-days: 30
