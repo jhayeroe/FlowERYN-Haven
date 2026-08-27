@@ -46,9 +46,29 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build installable APK
-        run: gradle --no-daemon assembleDebug
+        id: gradle_build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace assembleDebug 2>&1 | tee build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlowERYN-Haven-build-log
+          path: build.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Fail if Gradle build failed
+        if: steps.gradle_build.outcome == 'failure'
+        shell: bash
+        run: exit 1
 
       - name: Prepare APK artifact
+        if: steps.gradle_build.outcome == 'success'
         shell: bash
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk FlowERYN-Haven-v1.0.2.apk
@@ -56,6 +76,7 @@ jobs:
           sha256sum FlowERYN-Haven-v1.0.2.apk
 
       - name: Upload APK
+        if: steps.gradle_build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: FlowERYN-Haven-v1.0.2
